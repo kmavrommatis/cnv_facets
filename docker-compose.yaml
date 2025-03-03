@@ -1,0 +1,27 @@
+version: '3.9'
+# run
+# docker buildx bake --load
+# 
+services:
+  facets:
+    build: 
+      context: .
+      dockerfile: Dockerfile_dariober
+      x-bake:
+        tags:
+          - 739557175299.dkr.ecr.us-east-1.amazonaws.com/ngs/cnv_facets:vf3c93ee
+          - 739557175299.dkr.ecr.us-east-1.amazonaws.com/ngs/cnv_facets:v0.6.2
+          - 739557175299.dkr.ecr.us-east-1.amazonaws.com/ngs/cnv_facets:latest
+
+# docker run -ti -v $PWD:$PWD -w $PWD 739557175299.dkr.ecr.us-east-1.amazonaws.com/ngs/cnv_facets:latest \
+# /opt/cnv_facets/bin/cnv_facets.R \
+# --out EA1012091A41.sorted.dedup.realigned.recal.hg38-EA835177.sorted.dedup.realigned.recal.hg38 \
+# --depth 25 1000 --cval 25 250 --gbuild hg38 --snp-mapq 15 \
+# --snp-normal EA1012091A41.sorted.dedup.realigned.recal.hg38.bam \
+# --snp-vcf dbSNP.v150.vcf.gz \
+# --targets S04380110_Covered.bed \
+# --snp-nprocs 16 \
+# --snp-tumour EA835177.sorted.dedup.realigned.recal.hg38.bam \
+# --unmatched \
+# --nbhd-snp auto \
+# --focal

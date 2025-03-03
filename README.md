@@ -9,25 +9,26 @@ Detect somatic copy number variants (CNV) in tumour-normal samples using the
 
 <!-- vim-markdown-toc GFM -->
 
-* [Purpose](#purpose)
-* [Quick start](#quick-start)
-* [Requirements and Installation](#requirements-and-installation)
-    * [Install via bioconda (recommended)](#install-via-bioconda-recommended)
-    * [Install via setup script](#install-via-setup-script)
-* [Input](#input)
-    * [Option 1: BAM & VCF input](#option-1-bam--vcf-input)
-    * [Option 2: Pileup input](#option-2-pileup-input)
-* [Output](#output)
-    * [Variants](#variants)
-    * [CNV profile plot](#cnv-profile-plot)
-    * [Histograms of depth of coverage](#histograms-of-depth-of-coverage)
-    * [Diagnostic plot](#diagnostic-plot)
-    * [Pileup file](#pileup-file)
-* [Usage guidelines](#usage-guidelines)
-    * [Command options](#command-options)
-    * [Filtering output for relevant CNVs](#filtering-output-for-relevant-cnvs)
-* [Time and memory footprint](#time-and-memory-footprint)
-* [Citation & Getting help](#citation--getting-help)
+- [Purpose](#purpose)
+- [Quick start](#quick-start)
+- [Requirements and Installation](#requirements-and-installation)
+  - [Install via bioconda (recommended)](#install-via-bioconda-recommended)
+  - [Install via setup script](#install-via-setup-script)
+- [Input](#input)
+  - [Option 1: BAM \& VCF input](#option-1-bam--vcf-input)
+  - [Option 2: Pileup input](#option-2-pileup-input)
+- [Output](#output)
+  - [Variants](#variants)
+  - [CNV profile plot](#cnv-profile-plot)
+  - [Histograms of depth of coverage](#histograms-of-depth-of-coverage)
+  - [Diagnostic plot](#diagnostic-plot)
+  - [Pileup file](#pileup-file)
+- [Usage guidelines](#usage-guidelines)
+  - [Command options](#command-options)
+  - [Filtering output for relevant CNVs](#filtering-output-for-relevant-cnvs)
+- [Time and memory footprint](#time-and-memory-footprint)
+- [Citation \& Getting help](#citation--getting-help)
+- [Modifications](#modifications)
 
 <!-- vim-markdown-toc -->
 
@@ -351,3 +352,18 @@ recipients:
 
 * Post a question at https://www.biostars.org/ (you may want to notify me by
   sending an email to `dario <dot> beraldi <at> gmail <dot> com`)
+
+
+
+Modifications
+========
+
+The following modifications were introduced by K.Mavrommatis.
+
+* introduce the parameter `--purity-cval`: 
+When this value is set it allows for running FACETS in a two-pass mode, 
+where first a "purity" run estimates the overall segmentation profile,
+sample purity and ploidy, and subsequently the dipLogR value from this run 
+seeds a "high-sensitivity" run which may detect more focal events.
+This is a suggestion found in https://github.com/mskcc/facets-suite. 
+The default value is NULL i.e. this step is ommited. 
