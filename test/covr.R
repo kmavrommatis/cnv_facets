@@ -2,7 +2,7 @@
 #
 # Copyright (C) 2018-2019 University of Glasgow
 #
-# Author: Dario Beraldi <dario.beraldi@glasgow.ac.uk>
+# Author: Dario Beraldi
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -23,7 +23,9 @@
 # DEALINGS IN THE SOFTWARE.
 
 library(covr)
-xcov<- file_coverage(source_files= '../bin/cnv_facets.R', 
-                     test_files= 'test_cnv_facets.R')
+xcov <- file_coverage(
+    source_files = "../bin/cnv_facets.R",
+    test_files = "test_cnv_facets.R"
+)
 print(xcov)
-codecov(coverage= xcov)
+codecov(coverage = xcov)
