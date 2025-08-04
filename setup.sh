@@ -2,7 +2,6 @@
 #
 # Copyright (C) 2018-2019 University of Glasgow
 #
-# Author: Dario Beraldi <dario.beraldi@glasgow.ac.uk>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
