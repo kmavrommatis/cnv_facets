@@ -2,7 +2,8 @@
 #
 # Copyright (C) 2018-2019 University of Glasgow
 #
-# Author: Dario Beraldi <dario.beraldi@glasgow.ac.uk>
+# Author: Dario Beraldi
+# Modified by  Kostas Mavrommatis
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -317,7 +318,7 @@ if (sys.nframe() == 0) {
 
     xargs <- parser$parse_args()
 
-    
+
 
     if (is.null(xargs$pileup) && (is.null(xargs$snp_tumour) || is.null(xargs$snp_normal))) {
         write("Please provide a pileup file or both a tumour and a normal bam file", stderr())
@@ -425,7 +426,7 @@ if (sys.nframe() == 0) {
             mapq = xargs$snp_mapq,
             baq = xargs$snp_baq,
             pseudo_snp = nbhd_snp,
-            nprocs = min( 8, ceiling(xargs$snp_nprocs / 2) ),
+            nprocs = min(8, ceiling(xargs$snp_nprocs / 2)),
             keep_orphans = xargs$snp_count_orphans
         )
     } else {
@@ -514,160 +515,164 @@ if (sys.nframe() == 0) {
         write(sprintf("[%s] logR ploidy estimation used for final processing step NULL.", Sys.time()), stderr())
     }
 
-    
 
-    
+
+
     # get the memory size for the objects we want to work with
-    memory_object=2 * (object.size( rcmat_flt ) %>% as.numeric())
-    memory_available= memuse::Sys.meminfo()$freeram %>% as.numeric()
+    memory_object <- 2 * (object.size(rcmat_flt) %>% as.numeric())
+    memory_available <- memuse::Sys.meminfo()$freeram %>% as.numeric()
     write(sprintf("[%s] The memory requirement is  %d bytes", Sys.time(), memory_object), stderr())
-    options(future.globals.maxSize= memory_object)
-    use_cores<- min(   xargs$snp_nprocs, 
-                    floor( memory_available / memory_object ) )
+    options(future.globals.maxSize = memory_object)
+    use_cores <- min(
+        xargs$snp_nprocs,
+        floor(memory_available / memory_object)
+    )
     write(sprintf("[%s] Running solutions using %d cores.", Sys.time(), use_cores), stderr())
     oplan <- future::plan(future::multisession(workers = use_cores))
-    
+
 
     write(sprintf("[%s] Starting parallel processing...", Sys.time()), stderr())
 
-    internal_results <- future.apply::future_mapply(function(proc_cval, nbhd_snp, unmatched) {
-        write(sprintf("[%s] Solution parameters proc_cval: %d, nbhd: %d, unmatched mode: %s", Sys.time(), proc_cval, nbhd_snp, as.character(unmatched)), stderr())
+    internal_results <- future.apply::future_mapply(
+        function(proc_cval, nbhd_snp, unmatched) {
+            write(sprintf("[%s] Solution parameters proc_cval: %d, nbhd: %d, unmatched mode: %s", Sys.time(), proc_cval, nbhd_snp, as.character(unmatched)), stderr())
 
-        facets <- run_facets(
-            pre_rcmat = rcmat_flt,
-            pre_gbuild = xargs$gbuild,
-            pre_snp.nbhd = nbhd_snp,
-            pre_het.thresh = ifelse(unmatched, 0.1, 0.25),
-            pre_cval = pre_cval,
-            pre_deltaCN = 0,
-            pre_unmatched = unmatched,
-            pre_ndepth = 1, # We subset the input matrix instead of using ndepth*
-            pre_ndepthmax = 1e8, # options
-            proc_cval = proc_cval,
-            proc_min.nhet = 15,
-            proc_dipLogR = proc_dipLogR,
-            emcncf_unif = FALSE,
-            emcncf_min.nhet = 15,
-            emcncf_maxiter = 20,
-            emcncf_eps = 1e-3
-        )
-        # -----------------------------------------
+            facets <- run_facets(
+                pre_rcmat = rcmat_flt,
+                pre_gbuild = xargs$gbuild,
+                pre_snp.nbhd = nbhd_snp,
+                pre_het.thresh = ifelse(unmatched, 0.1, 0.25),
+                pre_cval = pre_cval,
+                pre_deltaCN = 0,
+                pre_unmatched = unmatched,
+                pre_ndepth = 1, # We subset the input matrix instead of using ndepth*
+                pre_ndepthmax = 1e8, # options
+                proc_cval = proc_cval,
+                proc_min.nhet = 15,
+                proc_dipLogR = proc_dipLogR,
+                emcncf_unif = FALSE,
+                emcncf_min.nhet = 15,
+                emcncf_maxiter = 20,
+                emcncf_eps = 1e-3
+            )
+            # -----------------------------------------
 
-        write(sprintf("[%s] Writing output", Sys.time()), stderr())
-        cncf <- copy(facets$emcncf_fit$cncf)
+            write(sprintf("[%s] Writing output", Sys.time()), stderr())
+            cncf <- copy(facets$emcncf_fit$cncf)
 
-        reset_chroms(cncf = cncf, gbuild = xargs$gbuild, chr_prefix = rcmat$chr_prefix)
-        classify_cnv(cncf)
+            reset_chroms(cncf = cncf, gbuild = xargs$gbuild, chr_prefix = rcmat$chr_prefix)
+            classify_cnv(cncf)
 
-        if (is.null(xargs$annotation) == FALSE) {
-            annotate(cncf, xargs$annotation)
-        }
-        outpattern <- paste0(xargs$out, "_", pre_cval, "_", proc_cval, "_", nbhd_snp, "_", ifelse(unmatched == TRUE, "unmatchednormal", "matchednormal"))
-        main.solution <- FALSE
-        if (nbhd_snp == orig_nbhd_snp & pre_cval == xargs$cval[1] & proc_cval == xargs$cval[2]) {
-            main.solution <- TRUE
-            outpattern <- paste0(xargs$out)
-        }
-        if (!is.null(xargs$dipLogR)) {
-            outpattern <- paste0(outpattern, "_", xargs$dipLogR)
-        }
-        if (main.solution == FALSE & xargs$focal) {
-            dir.create(file.path(dirname(outpattern), "focal"), showWarnings = FALSE)
-            outpattern <- file.path(dirname(outpattern), "focal", basename(outpattern))
-        }
-        vcf_tmp <- tempfile(pattern = paste0(basename(outpattern), "."), tmpdir = dirname(outpattern), fileext = ".vcf")
-        cmd <- sprintf("##%sCommand=%s; Version=%s; Date=%s", getScriptName(), paste(commandArgs(), collapse = " "), VERSION, Sys.time())
-
-        extra <- c(
-            mainsolution = main.solution,
-            purity = ifelse(is.na(facets$emcncf_fit$purity), 0.1, facets$emcncf_fit$purity),
-            ploidy = facets$emcncf_fit$ploidy,
-            dipLogR = facets$emcncf_fit$dipLogR,
-            emflags = facets$emcncf_fit$emflags,
-            estinsertsize = est_insert_size,
-            prepuritycval = ifelse(is.null(xargs$purity_cval), "No preliminary cval", xargs$purity_cval),
-            precval = pre_cval,
-            proccval = proc_cval,
-            snpnbhd = nbhd_snp,
-            usersnpnbhd = xargs$nbhd_snp,
-            matchednormal = !unmatched,
-            tumorsample = ifelse( is.null(xargs$snp_tumour), basename(xargs$pileup), gsub(".bam$", "", basename(xargs$snp_tumour))),
-            normalsample =ifelse( is.null(xargs$snp_normal), basename(xargs$pileup), gsub(".bam$", "", basename(xargs$snp_normal)))
-        )
-
-        header <- make_header(
-            gbuild = xargs$gbuild,
-            genomes = genomes,
-            is_chrom_prefixed = rcmat$chr_prefix,
-            cmd = cmd,
-            extra = extra
-        )
-        write(header, vcf_tmp)
-
-        for (i in 1:nrow(cncf)) {
-            record <- paste(facetsRecordToVcf(cncf[i]), collapse = "\t")
-            if (!is.null(record) & nchar(record) > 0) {
-                write(record, vcf_tmp, append = TRUE)
-            }else{
-                write(sprintf("[%s] Warning: empty record for segment %d. Check facets.err.log", Sys.time(), i), stderr())
-                write.table(as.data.frame(cncf)[i-10:i+10,], paste0(xargs$out, ".facets.err.log"), row.names = FALSE, col.names = TRUE, quote = FALSE)
+            if (is.null(xargs$annotation) == FALSE) {
+                annotate(cncf, xargs$annotation)
             }
-        }
-
-        tryCatch(
-            {
-                x_ <- bgzip(vcf_tmp, dest = paste0(outpattern, ".vcf.gz"), overwrite = TRUE)
-                x_ <- indexTabix(paste0(outpattern, ".vcf.gz"), format = "vcf4")
-                unlink(vcf_tmp)
-            },
-            error = function(e) {
-                write(sprintf("[%s] Error in bgzip: %s", Sys.time(), e), stderr())
-                unlink(vcf_tmp)
+            outpattern <- paste0(xargs$out, "_", pre_cval, "_", proc_cval, "_", nbhd_snp, "_", ifelse(unmatched == TRUE, "unmatchednormal", "matchednormal"))
+            main.solution <- FALSE
+            if (nbhd_snp == orig_nbhd_snp & pre_cval == xargs$cval[1] & proc_cval == xargs$cval[2]) {
+                main.solution <- TRUE
+                outpattern <- paste0(xargs$out)
             }
-        )
+            if (!is.null(xargs$dipLogR)) {
+                outpattern <- paste0(outpattern, "_", xargs$dipLogR)
+            }
+            if (main.solution == FALSE & xargs$focal) {
+                dir.create(file.path(dirname(outpattern), "focal"), showWarnings = FALSE)
+                outpattern <- file.path(dirname(outpattern), "focal", basename(outpattern))
+            }
+            vcf_tmp <- tempfile(pattern = paste0(basename(outpattern), "."), tmpdir = dirname(outpattern), fileext = ".vcf")
+            cmd <- sprintf("##%sCommand=%s; Version=%s; Date=%s", getScriptName(), paste(commandArgs(), collapse = " "), VERSION, Sys.time())
 
-        write(sprintf("[%s] Plotting genome...", Sys.time()), stderr())
-        png(paste0(outpattern, ".cnv.png"), units = "px", width = 1600, height = 1600, res = 300)
-        sname <- sprintf("%s; ploidy= %.2f; purity= %.2f", basename(outpattern), facets$emcncf_fit$ploidy, facets$emcncf_fit$purity)
-        plotSample(x = facets$proc_out, emfit = facets$emcncf_fit, sname = sname)
-        x_ <- dev.off()
+            extra <- c(
+                mainsolution = main.solution,
+                purity = ifelse(is.na(facets$emcncf_fit$purity), 0.1, facets$emcncf_fit$purity),
+                ploidy = facets$emcncf_fit$ploidy,
+                dipLogR = facets$emcncf_fit$dipLogR,
+                emflags = facets$emcncf_fit$emflags,
+                estinsertsize = est_insert_size,
+                prepuritycval = ifelse(is.null(xargs$purity_cval), "No preliminary cval", xargs$purity_cval),
+                precval = pre_cval,
+                proccval = proc_cval,
+                snpnbhd = nbhd_snp,
+                usersnpnbhd = xargs$nbhd_snp,
+                matchednormal = !unmatched,
+                tumorsample = ifelse(is.null(xargs$snp_tumour), basename(xargs$pileup), gsub(".bam$", "", basename(xargs$snp_tumour))),
+                normalsample = ifelse(is.null(xargs$snp_normal), basename(xargs$pileup), gsub(".bam$", "", basename(xargs$snp_normal)))
+            )
 
-        write(sprintf("[%s] Plotting spider...", Sys.time()), stderr())
-        pdf(paste0(outpattern, ".spider.pdf"), width = 16 / 2.54, height = 14 / 2.54)
-        par(las = 1, mar = c(3, 3, 1, 1), mgp = c(1.5, 0.5, 0), tcl = -0.3)
-        logRlogORspider(facets$proc_out$out, facets$proc_out$dipLogR)
-        x_ <- dev.off()
+            header <- make_header(
+                gbuild = xargs$gbuild,
+                genomes = genomes,
+                is_chrom_prefixed = rcmat$chr_prefix,
+                cmd = cmd,
+                extra = extra
+            )
+            write(header, vcf_tmp)
 
-        res <- list(
-            main_solution = extra[["mainsolution"]],
-            purity_cval = extra[["prepuritycval"]],
-            pre_cval = extra[["precval"]],
-            proc_cval = extra[["proccval"]],
-            SNP_density = extra[["snpnbhd"]],
-            dipLogR = extra[["dipLogR"]],
-            estimated_insert_size = extra[["estinsertsize"]],
-            user_pre_cval = xargs$cval[1],
-            user_proc_cval = xargs$cval[2],
-            user_SNP_density = extra[["usersnpnbhd"]],
-            ploidy = facets$emcncf_fit$ploidy,
-            purity = facets$emcncf_fit$purity,
-            n_segments = nrow(facets$emcncf_fit$cncf),
-            matched_normal = !unmatched,
-            emflags = facets$emcncf_fit$emflags
-        )
+            for (i in 1:nrow(cncf)) {
+                record <- paste(facetsRecordToVcf(cncf[i]), collapse = "\t")
+                if (!is.null(record) & nchar(record) > 0) {
+                    write(record, vcf_tmp, append = TRUE)
+                } else {
+                    write(sprintf("[%s] Warning: empty record for segment %d. Check facets.err.log", Sys.time(), i), stderr())
+                    write.table(as.data.frame(cncf)[i - 10:i + 10, ], paste0(xargs$out, ".facets.err.log"), row.names = FALSE, col.names = TRUE, quote = FALSE)
+                }
+            }
 
-        facets <- NULL
-        gc(verbose = FALSE)
-        # write(sprintf("[%s] Solution parameters proc_cval: %d, nbhd: %d, unmatched mode: %s. Completed!!", Sys.time(), proc_cval, nbhd_snp, as.character(unmatched)), stderr())
-        # write(sprintf("[%s] Solution stored in: %s", Sys.time(), outpattern), stderr())
-        return(res)
-    }, grid$proc_cval, 
-        grid$nbhd_snp, 
-        grid$unmatched, 
-        future.seed = TRUE, 
-        future.globals=TRUE,
-        SIMPLIFY = FALSE) %>% bind_rows() 
-    
+            tryCatch(
+                {
+                    x_ <- bgzip(vcf_tmp, dest = paste0(outpattern, ".vcf.gz"), overwrite = TRUE)
+                    x_ <- indexTabix(paste0(outpattern, ".vcf.gz"), format = "vcf4")
+                    unlink(vcf_tmp)
+                },
+                error = function(e) {
+                    write(sprintf("[%s] Error in bgzip: %s", Sys.time(), e), stderr())
+                    unlink(vcf_tmp)
+                }
+            )
+
+            write(sprintf("[%s] Plotting genome...", Sys.time()), stderr())
+            png(paste0(outpattern, ".cnv.png"), units = "px", width = 1600, height = 1600, res = 300)
+            sname <- sprintf("%s; ploidy= %.2f; purity= %.2f", basename(outpattern), facets$emcncf_fit$ploidy, facets$emcncf_fit$purity)
+            plotSample(x = facets$proc_out, emfit = facets$emcncf_fit, sname = sname)
+            x_ <- dev.off()
+
+            write(sprintf("[%s] Plotting spider...", Sys.time()), stderr())
+            pdf(paste0(outpattern, ".spider.pdf"), width = 16 / 2.54, height = 14 / 2.54)
+            par(las = 1, mar = c(3, 3, 1, 1), mgp = c(1.5, 0.5, 0), tcl = -0.3)
+            logRlogORspider(facets$proc_out$out, facets$proc_out$dipLogR)
+            x_ <- dev.off()
+
+            res <- list(
+                main_solution = extra[["mainsolution"]],
+                purity_cval = extra[["prepuritycval"]],
+                pre_cval = extra[["precval"]],
+                proc_cval = extra[["proccval"]],
+                SNP_density = extra[["snpnbhd"]],
+                dipLogR = extra[["dipLogR"]],
+                estimated_insert_size = extra[["estinsertsize"]],
+                user_pre_cval = xargs$cval[1],
+                user_proc_cval = xargs$cval[2],
+                user_SNP_density = extra[["usersnpnbhd"]],
+                ploidy = facets$emcncf_fit$ploidy,
+                purity = facets$emcncf_fit$purity,
+                n_segments = nrow(facets$emcncf_fit$cncf),
+                matched_normal = !unmatched,
+                emflags = facets$emcncf_fit$emflags
+            )
+
+            facets <- NULL
+            gc(verbose = FALSE)
+            # write(sprintf("[%s] Solution parameters proc_cval: %d, nbhd: %d, unmatched mode: %s. Completed!!", Sys.time(), proc_cval, nbhd_snp, as.character(unmatched)), stderr())
+            # write(sprintf("[%s] Solution stored in: %s", Sys.time(), outpattern), stderr())
+            return(res)
+        }, grid$proc_cval,
+        grid$nbhd_snp,
+        grid$unmatched,
+        future.seed = TRUE,
+        future.globals = TRUE,
+        SIMPLIFY = FALSE
+    ) %>% bind_rows()
+
     # --- end of proc_cval loop
     future::plan(oplan)
     # produce a table with some statistics
