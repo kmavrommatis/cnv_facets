@@ -182,11 +182,11 @@ parser$add_argument("--focal", "-F",
         "Run multiple iterations of FACETS in order to detect focal events
 If this argument is set the script will search in a grid of values
 mincval: 25. Typically let this run with the default 25
-maxcval: from 50 to user provided maxcval or 250 (whichever is smaller) by 50
-snp nbhd: from 60 to the nbhd value (user provided or auto detected) by 40
+maxcval: 30, 40 and from 50 to user provided maxcval or 250 (whichever is bigger) by 50
+snp nbhd: 30, 45, and from 60 to the nbhd value (user provided or auto detected) by 40
+each combination runs in matched and unmatched mode.
         ", action = "store_true", default = FALSE
 )
-
 
 parser$add_argument("--dipLogR", help = sprintf(
     "LogR for diploid state. Default: NULL "
@@ -317,6 +317,8 @@ if (sys.nframe() == 0) {
 
     xargs <- parser$parse_args()
 
+    
+
     if (is.null(xargs$pileup) && (is.null(xargs$snp_tumour) || is.null(xargs$snp_normal))) {
         write("Please provide a pileup file or both a tumour and a normal bam file", stderr())
         quit(status = 1)
@@ -342,6 +344,34 @@ if (sys.nframe() == 0) {
         write("Error: only one between --dipLogR and --purity-cval may be specified", stderr())
         quit(status = 1)
     }
+
+
+    # # # test values
+    # xargs=list(
+    #     # snp_tumour="/lab/ni/mavrommk/workspace/cnv_facets/test-kostas/PersonalisPS104976950_DNA-WES.bam",
+    #     # snp_normal="/lab/ni/mavrommk/workspace/cnv_facets/test-kostas/PersonalisPSDB9536713-WES.bam",
+    #     pileup="/lab/ni/mavrommk/workspace/cnv_facets/test-kostas/test-failed.csv.gz",
+    #     snp_vcf="/lab/ni/mavrommk/workspace/cnv_facets/test-kostas/gnomad.exomes.afonly.v4.1.vcf.gz",
+    #     snp_mapq=5,
+    #     snp_baq=10,
+    #     snp_nprocs=8,
+    #     depth=c(25, 4000),
+    #     targets="/lab/ni/mavrommk/workspace/cnv_facets/test-kostas/ImmunoID_NeXT_target_hg38_liftover.bed",
+    #     cval=c(25, 150),
+    #     nbhd_snp="auto",
+    #     gbuild="hg38",
+    #     unmathed=FALSE,
+    #     focal=TRUE,
+    #     diplogR=NULL,
+    #     out="/lab/ni/mavrommk/workspace/cnv_facets/test-kostas/test-failed",
+    #     rnd_seed="The name of the input file",
+    #     snp_count_orphans = FALSE,
+    #     no_cov_plot = FALSE
+    # )
+    # def_nbhd= list("auto", 250)
+
+
+
     est_insert_size <- NA
     if (xargs$nbhd_snp == "auto") {
         if (!is.null(xargs$pileup)) {
@@ -395,7 +425,7 @@ if (sys.nframe() == 0) {
             mapq = xargs$snp_mapq,
             baq = xargs$snp_baq,
             pseudo_snp = nbhd_snp,
-            nprocs = ceiling(xargs$snp_nprocs / 2),
+            nprocs = min( 8, ceiling(xargs$snp_nprocs / 2) ),
             keep_orphans = xargs$snp_count_orphans
         )
     } else {
@@ -434,6 +464,7 @@ if (sys.nframe() == 0) {
             rcmat = rcmat[["pileup"]], rcmat_flt = rcmat_flt,
             fname = paste0(xargs$out, ".cov.pdf"), title = paste0("Depth of coverage\n", xargs$out)
         )
+        write(sprintf("[%s] Plotting histogram of coverage in file %s", Sys.time(), paste0(xargs$out, ".cov.pdf")), stderr())
     }
 
     rcmat[["pileup"]] <- NULL
@@ -441,7 +472,7 @@ if (sys.nframe() == 0) {
     x_ <- gc(verbose = FALSE)
 
     # ------------- [Run FACETS] --------------
-    oplan <- future::plan(multisession(workers = xargs$snp_nprocs))
+
     # pre_cvals=if(xargs$cval[1]==-1){
     #     seq( 25, 100, 25)
     # }else{
@@ -452,10 +483,10 @@ if (sys.nframe() == 0) {
     write(sprintf("[%s] preCVAL=%d, procCVAL=%d, nbhd_snp=%d(%s)", Sys.time(), xargs$cval[1], xargs$cval[2], nbhd_snp, xargs$nbhd_snp), stderr())
     orig_nbhd_snp <- nbhd_snp
     if (xargs$focal) {
-        nbhd_snp <- unique(c(nbhd_snp, 60, seq(80, ceiling(nbhd_snp / 40) * 40, 40)))
-        proc_cvals <- unique(c(xargs$cval[2], seq(50, max(250, ceiling(xargs$cval[2] / 50) * 50), 50)))
+        nbhd_snp <- unique(c(nbhd_snp, 30, 45, 60, seq(80, ceiling(nbhd_snp / 40) * 40, 40)))
+        proc_cvals <- unique(c(xargs$cval[2], 30, 40, seq(50, max(250, ceiling(xargs$cval[2] / 50) * 50), 50)))
     }
-    grid <- expand.grid(proc_cval = proc_cvals, nbhd_snp = nbhd_snp)
+    grid <- expand.grid(proc_cval = proc_cvals, nbhd_snp = nbhd_snp, unmatched = xargs$unmatched)
     if (!is.null(xargs$purity_cval)) {
         write(sprintf("[%s] Preliminary purity estimation with warm up value %d...", Sys.time(), xargs$purity_cval), stderr())
         facets <- run_facets(
@@ -477,20 +508,39 @@ if (sys.nframe() == 0) {
             emcncf_eps = 1e-3
         )
         proc_dipLogR <- facets$emcncf_fit$dipLogR
+        write(sprintf("[%s] logR ploidy estimation used for final processing step %f.", Sys.time(), proc_dipLogR), stderr())
     } else {
         proc_dipLogR <- xargs$dipLogR
+        write(sprintf("[%s] logR ploidy estimation used for final processing step NULL.", Sys.time()), stderr())
     }
-    write(sprintf("[%s] logR ploidy estimation used for final processing step %f", Sys.time(), proc_dipLogR), stderr())
 
-    internal_results <- future.apply::future_mapply(function(proc_cval, nbhd_snp) {
+    
+
+    
+    # get the memory size for the objects we want to work with
+    memory_object=2 * (object.size( rcmat_flt ) %>% as.numeric())
+    memory_available= memuse::Sys.meminfo()$freeram %>% as.numeric()
+    write(sprintf("[%s] The memory requirement is  %d bytes", Sys.time(), memory_object), stderr())
+    options(future.globals.maxSize= memory_object)
+    use_cores<- min(   xargs$snp_nprocs, 
+                    floor( memory_available / memory_object ) )
+    write(sprintf("[%s] Running solutions using %d cores.", Sys.time(), use_cores), stderr())
+    oplan <- future::plan(future::multisession(workers = use_cores))
+    
+
+    write(sprintf("[%s] Starting parallel processing...", Sys.time()), stderr())
+
+    internal_results <- future.apply::future_mapply(function(proc_cval, nbhd_snp, unmatched) {
+        write(sprintf("[%s] Solution parameters proc_cval: %d, nbhd: %d, unmatched mode: %s", Sys.time(), proc_cval, nbhd_snp, as.character(unmatched)), stderr())
+
         facets <- run_facets(
             pre_rcmat = rcmat_flt,
             pre_gbuild = xargs$gbuild,
             pre_snp.nbhd = nbhd_snp,
-            pre_het.thresh = ifelse(xargs$unmatched, 0.1, 0.25),
+            pre_het.thresh = ifelse(unmatched, 0.1, 0.25),
             pre_cval = pre_cval,
             pre_deltaCN = 0,
-            pre_unmatched = xargs$unmatched,
+            pre_unmatched = unmatched,
             pre_ndepth = 1, # We subset the input matrix instead of using ndepth*
             pre_ndepthmax = 1e8, # options
             proc_cval = proc_cval,
@@ -512,7 +562,7 @@ if (sys.nframe() == 0) {
         if (is.null(xargs$annotation) == FALSE) {
             annotate(cncf, xargs$annotation)
         }
-        outpattern <- paste0(xargs$out, "_", pre_cval, "_", proc_cval, "_", nbhd_snp)
+        outpattern <- paste0(xargs$out, "_", pre_cval, "_", proc_cval, "_", nbhd_snp, "_", ifelse(unmatched == TRUE, "unmatchednormal", "matchednormal"))
         main.solution <- FALSE
         if (nbhd_snp == orig_nbhd_snp & pre_cval == xargs$cval[1] & proc_cval == xargs$cval[2]) {
             main.solution <- TRUE
@@ -530,7 +580,7 @@ if (sys.nframe() == 0) {
 
         extra <- c(
             mainsolution = main.solution,
-            purity = facets$emcncf_fit$purity,
+            purity = ifelse(is.na(facets$emcncf_fit$purity), 0.1, facets$emcncf_fit$purity),
             ploidy = facets$emcncf_fit$ploidy,
             dipLogR = facets$emcncf_fit$dipLogR,
             emflags = facets$emcncf_fit$emflags,
@@ -539,9 +589,10 @@ if (sys.nframe() == 0) {
             precval = pre_cval,
             proccval = proc_cval,
             snpnbhd = nbhd_snp,
-            usersnpnhbh = xargs$nbhd_snp,
-            tumorsample = gsub("bam$", "", basename(xargs$snp_tumour)),
-            normalsample = gsub("bam$", "", basename(xargs$snp_normal))
+            usersnpnbhd = xargs$nbhd_snp,
+            matchednormal = !unmatched,
+            tumorsample = ifelse( is.null(xargs$snp_tumour), basename(xargs$pileup), gsub(".bam$", "", basename(xargs$snp_tumour))),
+            normalsample =ifelse( is.null(xargs$snp_normal), basename(xargs$pileup), gsub(".bam$", "", basename(xargs$snp_normal)))
         )
 
         header <- make_header(
@@ -554,12 +605,26 @@ if (sys.nframe() == 0) {
         write(header, vcf_tmp)
 
         for (i in 1:nrow(cncf)) {
-            write(paste(facetsRecordToVcf(cncf[i]), collapse = "\t"), vcf_tmp, append = TRUE)
+            record <- paste(facetsRecordToVcf(cncf[i]), collapse = "\t")
+            if (!is.null(record) & nchar(record) > 0) {
+                write(record, vcf_tmp, append = TRUE)
+            }else{
+                write(sprintf("[%s] Warning: empty record for segment %d. Check facets.err.log", Sys.time(), i), stderr())
+                write.table(as.data.frame(cncf)[i-10:i+10,], paste0(xargs$out, ".facets.err.log"), row.names = FALSE, col.names = TRUE, quote = FALSE)
+            }
         }
 
-        x_ <- bgzip(vcf_tmp, dest = paste0(outpattern, ".vcf.gz"), overwrite = TRUE)
-        x_ <- indexTabix(paste0(outpattern, ".vcf.gz"), format = "vcf4")
-        unlink(vcf_tmp)
+        tryCatch(
+            {
+                x_ <- bgzip(vcf_tmp, dest = paste0(outpattern, ".vcf.gz"), overwrite = TRUE)
+                x_ <- indexTabix(paste0(outpattern, ".vcf.gz"), format = "vcf4")
+                unlink(vcf_tmp)
+            },
+            error = function(e) {
+                write(sprintf("[%s] Error in bgzip: %s", Sys.time(), e), stderr())
+                unlink(vcf_tmp)
+            }
+        )
 
         write(sprintf("[%s] Plotting genome...", Sys.time()), stderr())
         png(paste0(outpattern, ".cnv.png"), units = "px", width = 1600, height = 1600, res = 300)
@@ -573,7 +638,7 @@ if (sys.nframe() == 0) {
         logRlogORspider(facets$proc_out$out, facets$proc_out$dipLogR)
         x_ <- dev.off()
 
-        return(list(
+        res <- list(
             main_solution = extra[["mainsolution"]],
             purity_cval = extra[["prepuritycval"]],
             pre_cval = extra[["precval"]],
@@ -583,14 +648,28 @@ if (sys.nframe() == 0) {
             estimated_insert_size = extra[["estinsertsize"]],
             user_pre_cval = xargs$cval[1],
             user_proc_cval = xargs$cval[2],
-            user_SNP_density = extra[["usersnpnhbh"]],
+            user_SNP_density = extra[["usersnpnbhd"]],
             ploidy = facets$emcncf_fit$ploidy,
             purity = facets$emcncf_fit$purity,
             n_segments = nrow(facets$emcncf_fit$cncf),
+            matched_normal = !unmatched,
             emflags = facets$emcncf_fit$emflags
-        ))
-    }, grid$proc_cval, grid$nbhd_snp, future.seed = TRUE, SIMPLIFY = FALSE) %>% bind_rows() # --- end of proc_cval loop
+        )
 
+        facets <- NULL
+        gc(verbose = FALSE)
+        # write(sprintf("[%s] Solution parameters proc_cval: %d, nbhd: %d, unmatched mode: %s. Completed!!", Sys.time(), proc_cval, nbhd_snp, as.character(unmatched)), stderr())
+        # write(sprintf("[%s] Solution stored in: %s", Sys.time(), outpattern), stderr())
+        return(res)
+    }, grid$proc_cval, 
+        grid$nbhd_snp, 
+        grid$unmatched, 
+        future.seed = TRUE, 
+        future.globals=TRUE,
+        SIMPLIFY = FALSE) %>% bind_rows() 
+    
+    # --- end of proc_cval loop
+    future::plan(oplan)
     # produce a table with some statistics
     options(width = 10000)
     internal_results %>% print.data.frame(., digits = 3, quote = FALSE, right = TRUE, row.names = FALSE, max = 1000)
