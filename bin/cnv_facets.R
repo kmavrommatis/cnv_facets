@@ -184,8 +184,7 @@ parser$add_argument("--focal", "-F",
 If this argument is set the script will search in a grid of values
 mincval: 25. Typically let this run with the default 25
 maxcval: 30, 40 and from 50 to user provided maxcval or 250 (whichever is bigger) by 50
-snp nbhd: 30, 45, and from 60 to the nbhd value (user provided or auto detected) by 40
-each combination runs in matched and unmatched mode.
+snp nbhd: 30, 45, and from 60 to the nbhd value (user provided or auto detected) by 40.
         ", action = "store_true", default = FALSE
 )
 
@@ -519,7 +518,7 @@ if (sys.nframe() == 0) {
 
 
     # get the memory size for the objects we want to work with
-    memory_object <- 2 * (object.size(rcmat_flt) %>% as.numeric())
+    memory_object <- 2.5 * (object.size(rcmat_flt) %>% as.numeric()) + 1024^3
     memory_available <- memuse::Sys.meminfo()$freeram %>% as.numeric()
     write(sprintf("[%s] The memory requirement is  %d bytes", Sys.time(), memory_object), stderr())
     options(future.globals.maxSize = memory_object)

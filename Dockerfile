@@ -46,5 +46,5 @@ RUN chmod uog+x /opt/cnv_facets/bin/cnv_facets.R
 # RUN /opt/cnv_facets/setup.sh --bin_dir /usr/bin
 
 
-COPY ./Dockerfile_dariober /opt/Dockerfile
+COPY ./Dockerfile /opt/Dockerfile
 
