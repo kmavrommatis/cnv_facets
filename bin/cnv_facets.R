@@ -487,6 +487,7 @@ if (sys.nframe() == 0) {
         proc_cvals <- unique(c(xargs$cval[2], 30, 40, seq(50, max(250, ceiling(xargs$cval[2] / 50) * 50), 50)))
     }
     grid <- expand.grid(proc_cval = proc_cvals, nbhd_snp = nbhd_snp, unmatched = xargs$unmatched)
+    setorder( rcmat_flt, 'Chromosome', 'Position')
     if (!is.null(xargs$purity_cval)) {
         write(sprintf("[%s] Preliminary purity estimation with warm up value %d...", Sys.time(), xargs$purity_cval), stderr())
         facets <- run_facets(
@@ -518,9 +519,9 @@ if (sys.nframe() == 0) {
 
 
     # get the memory size for the objects we want to work with
-    memory_object <- 2.5 * (object.size(rcmat_flt) %>% as.numeric()) + 1024^3
+    memory_object <- 2 * (object.size(rcmat_flt) %>% as.numeric()) + 1024^3
     memory_available <- memuse::Sys.meminfo()$freeram %>% as.numeric()
-    write(sprintf("[%s] The memory requirement is  %d bytes", Sys.time(), memory_object), stderr())
+    write(sprintf("[%s] The memory requirement is  %f bytes", Sys.time(), memory_object), stderr())
     options(future.globals.maxSize = memory_object)
     use_cores <- min(
         xargs$snp_nprocs,
@@ -671,6 +672,7 @@ if (sys.nframe() == 0) {
         future.globals = TRUE,
         SIMPLIFY = FALSE
     ) %>% bind_rows()
+
 
     # --- end of proc_cval loop
     future::plan(oplan)
