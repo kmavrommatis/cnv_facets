@@ -1,2 +1,3 @@
 test/test_out
 test/vcf_validator
+test-kostas/*
