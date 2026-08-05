@@ -487,7 +487,7 @@ if (sys.nframe() == 0) {
         proc_cvals <- unique(c(xargs$cval[2], 30, 40, seq(50, max(250, ceiling(xargs$cval[2] / 50) * 50), 50)))
     }
     grid <- expand.grid(proc_cval = proc_cvals, nbhd_snp = nbhd_snp, unmatched = xargs$unmatched)
-    setorder( rcmat_flt, 'Chromosome', 'Position')
+    setorder(rcmat_flt, "Chromosome", "Position")
     if (!is.null(xargs$purity_cval)) {
         write(sprintf("[%s] Preliminary purity estimation with warm up value %d...", Sys.time(), xargs$purity_cval), stderr())
         facets <- run_facets(
