@@ -658,27 +658,59 @@ neutral | Copy number neutral (`SVTYPE=NEUTR`)
 
 ### Header metadata
 
-Besides `##fileformat`, `##reference`, the `##contig` lines for the chosen
-build, and the `##INFO`/`##FILTER`/`##ALT` definitions, the header records the
-full command line, the version of `cnv_facets.R` and of facets, the date, and
-the following run-specific keys:
+The header opens with the standard VCF boilerplate — `##fileformat=VCFv4.2`,
+`##reference` set to `--gbuild`, one `##contig` line per chromosome of that
+build, and the `##INFO`, `##FILTER` and `##ALT` definitions of the tags
+described above. Note that the contig names and lengths come from the hard-coded
+chromosome tables in the script and from `--gbuild`, not from the input BAM or
+VCF.
+
+FACETS-specific information is then added in two forms: the invocation line, and
+a block of `##key=value` lines placed just before the `#CHROM` line. Together
+they make each VCF self-describing, so a file can be traced back to the
+parameters and the fit that produced it without consulting the log.
+
+**The invocation line** records the full command line, the version of
+`cnv_facets.R` and of the underlying facets package, and the time of the run.
+Its key is the name of the script:
+
+```
+##cnv_facets.RCommand=<full command line>; Version=0.16.1; facets=<packageVersion>; Date=<timestamp>
+```
+
+**Results of the model fit**, as returned by `emcncf()`:
+
+Key | Description
+----|------------
+`##purity` | Tumour purity estimated by `emcncf()`. Reported as `0.1` when the fit returns `NA`
+`##ploidy` | Tumour ploidy estimated by `emcncf()`
+`##dipLogR` | Log-ratio of the diploid state, fitted for this solution or supplied via `--dipLogR`/`--purity-cval`
+`##emflags` | Warning flags emitted by `emcncf()` about the quality of the fit
+
+**Parameters actually used for this solution.** These are worth having in the
+file because with `--focal` or `--purity-cval` they need not be the values given
+on the command line:
+
+Key | Description
+----|------------
+`##precval` | Pre-processing critical value used (`--cval[1]`)
+`##proccval` | Processing critical value used for this solution
+`##snpnbhd` | SNP neighbourhood used for this solution
+`##usersnpnbhd` | Value of `--nbhd-snp` as given on the command line, *e.g.* the literal `auto`
+`##prepuritycval` | Value of `--purity-cval`, or the string `No preliminary cval`
+`##matchednormal` | `TRUE` unless `--unmatched` was set
+`##estinsertsize` | Insert size measured from the normal BAM when `--nbhd-snp auto` is used; `NA` otherwise
+
+**Provenance of the solution and of the input:**
 
 Key | Description
 ----|------------
 `##mainsolution` | `TRUE` for the solution matching the requested parameters, `FALSE` for the extra `--focal` solutions
-`##purity` | Tumour purity estimated by `emcncf()`. Reported as `0.1` when the fit returns `NA`
-`##ploidy` | Tumour ploidy estimated by `emcncf()`
-`##dipLogR` | Log-ratio of the diploid state used or fitted for this solution
-`##emflags` | Warning flags emitted by `emcncf()` about the quality of the fit
-`##estinsertsize` | Insert size estimated from the normal BAM when `--nbhd-snp auto` is used; `NA` otherwise
-`##prepuritycval` | Value of `--purity-cval`, or the string `No preliminary cval`
-`##precval` | Pre-processing critical value actually used (`--cval[1]`)
-`##proccval` | Processing critical value actually used for this solution
-`##snpnbhd` | SNP neighbourhood actually used for this solution
-`##usersnpnbhd` | Value of `--nbhd-snp` as given on the command line, *e.g.* `auto`
-`##matchednormal` | `TRUE` unless `--unmatched` was set
-`##tumorsample` | Tumour BAM file name without extension, or the pileup file name with pileup input
-`##normalsample` | Normal BAM file name without extension, or the pileup file name with pileup input
+`##tumorsample` | Tumour BAM file name without the `.bam` extension, or the pileup file name with pileup input
+`##normalsample` | Normal BAM file name without the `.bam` extension, or the pileup file name with pileup input
+
+All of these values are written as strings, since numbers and file names are
+collected into a single character vector before the header is assembled.
 
 Solution summary table
 ----------------------
